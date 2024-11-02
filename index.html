@@ -6,73 +6,130 @@
   <meta name="viewport"
     content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
   <title>Hello WebXR!</title>
-
   <!-- three.js -->
   <script src="https://unpkg.com/three@0.126.0/build/three.js"></script>
+  <style>
+    button {
+      padding: 12px 24px;
+      font-size: 16px;
+      margin: 20px;
+    }
+  </style>
 </head>
 
 <body>
   <button onclick="activateXR()">Start Hello WebXR</button>
-</body>
-<script>
-  async function activateXR() {
-    const canvas = document.createElement("canvas");
-    document.body.appendChild(canvas);
-    const gl = canvas.getContext("webgl", { xrCompatible: true });
+  <script>
+    async function activateXR() {
+      // Check if XR is supported
+      if (!navigator.xr) {
+        alert("WebXR not supported by your browser");
+        return;
+      }
 
-    const scene = new THREE.Scene();
-    const materials = [
-      new THREE.MeshBasicMaterial({ color: 0xff0000 }),
-      new THREE.MeshBasicMaterial({ color: 0x0000ff }),
-      new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
-      new THREE.MeshBasicMaterial({ color: 0xff00ff }),
-      new THREE.MeshBasicMaterial({ color: 0x00ffff }),
-      new THREE.MeshBasicMaterial({ color: 0xffff00 }),
-    ]
+      try {
+        // Check if immersive-ar is supported
+        const supported = await navigator.xr.isSessionSupported('immersive-ar');
+        if (!supported) {
+          alert("immersive-ar mode not supported by your device");
+          return;
+        }
 
-    const cube = new THREE.Mesh(new THREE.BoxBufferGeometry(0.2, 0.2, 0.2), materials)
-    cube.position.set(1, 1, 1);
-    scene.add(cube);
+        const canvas = document.createElement("canvas");
+        document.body.appendChild(canvas);
+        const gl = canvas.getContext("webgl", { xrCompatible: true });
 
-    const renderer = new THREE.WebGLRenderer({
-      alpha: true,
-      preserveDrawingBuffer: true,
-      canvas: canvas,
-      context: gl
-    });
-    renderer.autoClear = false;
+        // Create Three.js scene
+        const scene = new THREE.Scene();
 
-    const camera = new THREE.PerspectiveCamera();
-    camera.matrixAutoUpdate = false;
+        // Create materials for cube faces
+        const materials = [
+          new THREE.MeshBasicMaterial({ color: 0xff0000 }), // red
+          new THREE.MeshBasicMaterial({ color: 0x0000ff }), // blue
+          new THREE.MeshBasicMaterial({ color: 0x00ff00 }), // green
+          new THREE.MeshBasicMaterial({ color: 0xff00ff }), // magenta
+          new THREE.MeshBasicMaterial({ color: 0x00ffff }), // cyan
+          new THREE.MeshBasicMaterial({ color: 0xffff00 })  // yellow
+        ];
 
-    const session = await navigator.xr.requestSession("immersive-ar");
-    session.updateRenderState({
-      baseLayer: new XRWebGLLayer(session, gl)
-    })
+        // Create cube with different colored faces
+        const cube = new THREE.Mesh(
+          new THREE.BoxGeometry(0.2, 0.2, 0.2),
+          materials
+        );
+        cube.position.set(1, 1, -1); // Moved slightly forward for better visibility
+        scene.add(cube);
 
-    const referenceSpace = await session.requestReferenceSpacce('local')
+        // Add some light
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(1, 1, 1);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
-    const onXRFrame = (time, frame) => {
-      session.requestAnimationFrame(onXRFrame)
+        // Setup renderer
+        const renderer = new THREE.WebGLRenderer({
+          alpha: true,
+          preserveDrawingBuffer: true,
+          canvas: canvas,
+          context: gl
+        });
+        renderer.autoClear = false;
 
-      gl.bindFrameBuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.frameBuffer)
+        // Setup camera
+        const camera = new THREE.PerspectiveCamera();
+        camera.matrixAutoUpdate = false;
 
-      const pose = frame.getViewerPose(referenceSpace);
-      if (pose) {
-        const view = post.views[0];
+        // Request XR session
+        const session = await navigator.xr.requestSession("immersive-ar", {
+          requiredFeatures: ['local']
+        });
 
-        const viewport = session.renderState.baseLayer.getViewport(view);
-        renderer.setSize(viewport.width, viewport.height)
+        // Setup XR layer
+        session.updateRenderState({
+          baseLayer: new XRWebGLLayer(session, gl)
+        });
 
-        camera.matrix.fromArray(view.transform.matrix)
-        camera.projectionMatrix.fromArray(view.projectionMatrix);
-        camera.updateMatrixWorld(true);
+        // Get reference space
+        const referenceSpace = await session.requestReferenceSpace('local');
 
-        renderer.render(scene, camera)
+        // Animation loop
+        function onXRFrame(time, frame) {
+          session.requestAnimationFrame(onXRFrame);
+
+          // Rotate cube
+          cube.rotation.x += 0.01;
+          cube.rotation.y += 0.01;
+
+          // Bind framebuffer
+          gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
+
+          // Get pose and render if available
+          const pose = frame.getViewerPose(referenceSpace);
+          if (pose) {
+            const view = pose.views[0];
+            const viewport = session.renderState.baseLayer.getViewport(view);
+            renderer.setSize(viewport.width, viewport.height);
+
+            camera.matrix.fromArray(view.transform.matrix);
+            camera.projectionMatrix.fromArray(view.projectionMatrix);
+            camera.updateMatrixWorld(true);
+
+            renderer.render(scene, camera);
+          }
+        }
+
+        session.requestAnimationFrame(onXRFrame);
+
+        // Handle session end
+        session.addEventListener('end', () => {
+          console.log('Session ended');
+        });
+      } catch (error) {
+        console.error('Error starting XR session:', error);
+        alert('Error starting XR session: ' + error.message);
       }
     }
-    session.requestAnimationFrame(onXRFrame)
-  }
-</script>
+  </script>
+</body>
 
 </html>
